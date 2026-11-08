@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USCIS 2025 Civics Test Practice</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .card-flip { transition: transform 0.3s; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between">
+
+  <!-- Header -->
+  <header class="bg-blue-900 border-b border-blue-800 p-4 sticky top-0 z-10 shadow-md">
+    <div class="max-w-md mx-auto flex justify-between items-center">
+      <h1 class="font-bold text-lg tracking-wide text-white">USCIS 2025 Prep</h1>
+      <div class="space-x-2">
+        <button id="tab-exam" class="px-3 py-1 bg-blue-700 font-semibold rounded text-sm text-white">Oral Exam</button>
+        <button id="tab-study" class="px-3 py-1 bg-slate-800 text-slate-300 rounded text-sm hover:text-white">Study List</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-md mx-auto w-full flex-grow p-4 flex flex-col justify-center">
+
+    <!-- EXAM VIEW -->
+    <div id="view-exam" class="w-full">
+      <!-- HUD / Scoreboard -->
+      <div class="flex justify-between items-center mb-4 bg-slate-800 p-3 rounded-lg border border-slate-700">
+        <div>
+          <div class="text-xs uppercase text-slate-400 font-semibold">Question</div>
+          <div id="exam-qnum" class="text-lg font-bold text-white">1 / 20</div>
+        </div>
+        <div class="flex space-x-4">
+          <div class="text-center">
+            <div class="text-xs uppercase text-green-400 font-semibold">Pass Target</div>
+            <div id="exam-correct" class="text-lg font-bold text-green-400">0 / 12</div>
+          </div>
+          <div class="text-center">
+            <div class="text-xs uppercase text-rose-400 font-semibold">Fail Limit</div>
+            <div id="exam-incorrect" class="text-lg font-bold text-rose-400">0 / 9</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question Card -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-lg min-h-[220px] flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-start mb-2">
+            <span id="exam-category" class="text-xs font-semibold text-blue-400 uppercase tracking-wider">Category</span>
+            <button id="btn-speak" class="p-2 bg-blue-950 hover:bg-blue-900 border border-blue-700 rounded-full text-blue-300" title="Listen to question">
+              🔊 Read Aloud
+            </button>
+          </div>
+          <h2 id="exam-question" class="text-xl font-semibold text-white leading-snug mt-1">Loading...</h2>
+        </div>
+
+        <div id="answer-box" class="hidden mt-4 pt-4 border-t border-slate-700">
+          <div class="text-xs font-semibold text-slate-400 uppercase mb-1">Acceptable Official Answers:</div>
+          <ul id="exam-answers" class="list-disc list-inside space-y-1 text-emerald-300 font-medium text-sm"></ul>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div id="controls-reveal" class="mt-4">
+        <button id="btn-reveal" class="w-full py-3.5 bg-blue-600 hover:bg-blue-500 font-semibold rounded-xl text-white shadow-md">
+          Show Answers
+        </button>
+      </div>
+
+      <div id="controls-grade" class="hidden grid grid-cols-2 gap-3 mt-4">
+        <button id="btn-incorrect" class="py-3.5 bg-rose-700 hover:bg-rose-600 font-bold rounded-xl text-white shadow-md">
+          ✕ Missed (0)
+        </button>
+        <button id="btn-correct" class="py-3.5 bg-emerald-600 hover:bg-emerald-500 font-bold rounded-xl text-white shadow-md">
+          ✓ Correct (1)
+        </button>
+      </div>
+    </div>
+
+    <!-- RESULT MODAL -->
+    <div id="view-result" class="hidden text-center bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+      <h2 id="result-title" class="text-3xl font-extrabold mb-2">PASSED!</h2>
+      <p id="result-desc" class="text-slate-300 text-sm mb-6">You reached 12 correct answers.</p>
+      <button id="btn-restart" class="w-full py-3 bg-blue-600 font-bold rounded-xl text-white hover:bg-blue-500">
+        Start New Exam
+      </button>
+    </div>
+
+    <!-- STUDY LIST VIEW -->
+    <div id="view-study" class="hidden space-y-3">
+      <input type="text" id="search-study" placeholder="Search 128 questions..." class="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl text-sm focus:outline-none focus:border-blue-500">
+      <div id="study-container" class="space-y-3 max-h-[70vh] overflow-y-auto pr-1"></div>
+    </div>
+
+  </main>
+
+  <footer class="p-3 text-center text-xs text-slate-500">
+    Configured for Georgia District 12 • 2025 USCIS Bank
+  </footer>
+
+  <script>
+    // 1. DATASET DEFINITION (Embedded 128 Questions with GA-12 Localizations)
+    const rawQuestions = [
+      { id: 1, cat: "Principles of American Government", q: "What is the form of government of the United States?", a: ["Republic", "Constitution-based federal republic", "Representative democracy"] },
+      { id: 2, cat: "Principles of American Government", q: "What is the supreme law of the land?", a: ["(U.S.) Constitution"] },
+      { id: 3, cat: "Principles of American Government", q: "Name one thing the U.S. Constitution does.", a: ["Forms the government", "Defines powers of government", "Defines the parts of government", "Protects the rights of the people"] },
+      { id: 4, cat: "Principles of American Government", q: "The U.S. Constitution starts with the words 'We the People.' What does 'We the People' mean?", a: ["Self-government", "Popular sovereignty", "Consent of the governed", "People should govern themselves", "(Example of) social contract"] },
+      { id: 5, cat: "Principles of American Government", q: "How are changes made to the U.S. Constitution?", a: ["Amendments", "The amendment process"] },
+      { id: 6, cat: "Principles of American Government", q: "What does the Bill of Rights protect?", a: ["(The basic) rights of Americans", "(The basic) rights of people living in the United States"] },
+      { id: 7, cat: "Principles of American Government", q: "How many amendments does the U.S. Constitution have?", a: ["Twenty-seven (27)"] },
+      { id: 8, cat: "Principles of American Government", q: "Why is the Declaration of Independence important?", a: ["It says America is free from British control", "It says all people are created equal", "It identifies inherent rights", "It identifies individual freedoms"] },
+      { id: 9, cat: "Principles of American Government", q: "What founding document said the American colonies were free from Britain?", a: ["Declaration of Independence"] },
+      { id: 10, cat: "Principles of American Government", q: "Name two important ideas from the Declaration of Independence and the U.S. Constitution.", a: ["Equality", "Liberty", "Social contract", "Natural rights", "Limited government", "Self-government"] },
+      { id: 11, cat: "Principles of American Government", q: "The words 'Life, Liberty, and the pursuit of Happiness' are in what founding document?", a: ["Declaration of Independence"] },
+      { id: 12, cat: "Principles of American Government", q: "What is the economic system of the United States?", a: ["Capitalism", "Free market economy"] },
+      { id: 13, cat: "Principles of American Government", q: "What is the rule of law?", a: ["Everyone must follow the law", "Leaders must obey the law", "Government must obey the law", "No one is above the law"] },
+      { id: 14, cat: "Principles of American Government", q: "Many documents influenced the U.S. Constitution. Name one.", a: ["Declaration of Independence", "Articles of Confederation", "Federalist Papers", "Anti-Federalist Papers", "Virginia Declaration of Rights", "Fundamental Orders of Connecticut", "Mayflower Compact", "Iroquois Great Law of Peace"] },
+      { id: 15, cat: "Principles of American Government", q: "There are three branches of government. Why?", a: ["So one part does not become too powerful", "Checks and balances", "Separation of powers"] },
+      { id: 16, cat: "System of Government", q: "Name the three branches of government.", a: ["Legislative, executive, and judicial", "Congress, president, and the courts"] },
+      { id: 17, cat: "System of Government", q: "The President of the United States is in charge of which branch of government?", a: ["Executive branch"] },
+      { id: 18, cat: "System of Government", q: "What part of the federal government writes laws?", a: ["(U.S.) Congress", "(U.S. or national) legislature", "Legislative branch"] },
+      { id: 19, cat: "System of Government", q: "What are the two parts of the U.S. Congress?", a: ["Senate and House (of Representatives)"] },
+      { id: 20, cat: "System of Government", q: "Name one power of the U.S. Congress.", a: ["Writes laws", "Declares war", "Makes the federal budget"] },
+      { id: 21, cat: "System of Government", q: "How many U.S. senators are there?", a: ["One hundred (100)"] },
+      { id: 22, cat: "System of Government", q: "How long is a term for a U.S. senator?", a: ["Six (6) years"] },
+      { id: 23, cat: "System of Government", q: "Who is one of your state's U.S. senators now?", a: ["Jon Ossoff", "Raphael Warnock"] },
+      { id: 24, cat: "System of Government", q: "How many voting members are in the House of Representatives?", a: ["Four hundred thirty-five (435)"] },
+      { id: 25, cat: "System of Government", q: "How long is a term for a member of the House of Representatives?", a: ["Two (2) years"] },
+      { id: 26, cat: "System of Government", q: "Why do U.S. representatives serve shorter terms than U.S. senators?", a: ["To more closely follow public opinion"] },
+      { id: 27, cat: "System of Government", q: "How many senators does each state have?", a: ["Two (2)"] },
+      { id: 28, cat: "System of Government", q: "Why does each state have two senators?", a: ["Equal representation (for small states)", "The Great Compromise (Connecticut Compromise)"] },
+      { id: 29, cat: "System of Government", q: "Name your U.S. representative.", a: ["Rick Allen (District 12)"] },
+      { id: 30, cat: "System of Government", q: "What is the name of the Speaker of the House of Representatives now?", a: ["Check current Speaker at uscis.gov/citizenship/testupdates"] },
+      { id: 31, cat: "System of Government", q: "Who does a U.S. senator represent?", a: ["Citizens of their state", "People of their state"] },
+      { id: 32, cat: "System of Government", q: "Who elects U.S. senators?", a: ["Citizens from their state"] },
+      { id: 33, cat: "System of Government", q: "Who does a member of the House of Representatives represent?", a: ["Citizens in their district", "People in their district"] },
+      { id: 34, cat: "System of Government", q: "Who elects members of the House of Representatives?", a: ["Citizens from their district"] },
+      { id: 35, cat: "System of Government", q: "Some states have more representatives than other states. Why?", a: ["(Because of) the state's population", "They have more people"] },
+      { id: 36, cat: "System of Government", q: "The President of the United States is elected for how many years?", a: ["Four (4) years"] },
+      { id: 37, cat: "System of Government", q: "The President of the United States can serve only two terms. Why?", a: ["(Because of) the 22nd Amendment", "To keep the president from becoming too powerful"] },
+      { id: 38, cat: "System of Government", q: "What is the name of the President of the United States now?", a: ["Check current President at uscis.gov/citizenship/testupdates"] },
+      { id: 39, cat: "System of Government", q: "What is the name of the Vice President of the United States now?", a: ["Check current Vice President at uscis.gov/citizenship/testupdates"] },
+      { id: 40, cat: "System of Government", q: "If the president can no longer serve, who becomes president?", a: ["The Vice President (of the United States)"] },
+      { id: 41, cat: "System of Government", q: "Name one power of the president.", a: ["Signs bills into law", "Vetoes bills", "Enforces laws", "Commander in Chief", "Chief diplomat", "Appoints federal judges"] },
+      { id: 42, cat: "System of Government", q: "Who is Commander in Chief of the U.S. military?", a: ["The President (of the United States)"] },
+      { id: 43, cat: "System of Government", q: "Who signs bills to become laws?", a: ["The President (of the United States)"] },
+      { id: 44, cat: "System of Government", q: "Who vetoes bills?", a: ["The President (of the United States)"] },
+      { id: 45, cat: "System of Government", q: "Who appoints federal judges?", a: ["The President (of the United States)"] },
+      { id: 46, cat: "System of Government", q: "The executive branch has many parts. Name one.", a: ["President", "Cabinet", "Federal departments and agencies"] },
+      { id: 47, cat: "System of Government", q: "What does the President's Cabinet do?", a: ["Advises the President"] },
+      { id: 48, cat: "System of Government", q: "What are two Cabinet-level positions?", a: ["Secretary of State", "Attorney General", "Secretary of Defense", "Secretary of the Treasury"] },
+      { id: 49, cat: "System of Government", q: "Why is the Electoral College important?", a: ["It decides who is elected president", "Compromise between popular election and congressional selection"] },
+      { id: 50, cat: "System of Government", q: "What is one part of the judicial branch?", a: ["Supreme Court", "Federal Courts"] },
+      { id: 51, cat: "System of Government", q: "What does the judicial branch do?", a: ["Reviews laws", "Explains laws", "Resolves disputes about the law", "Decides if a law goes against the Constitution"] },
+      { id: 52, cat: "System of Government", q: "What is the highest court in the United States?", a: ["Supreme Court"] },
+      { id: 53, cat: "System of Government", q: "How many seats are on the Supreme Court?", a: ["Nine (9)"] },
+      { id: 54, cat: "System of Government", q: "How many Supreme Court justices are usually needed to decide a case?", a: ["Five (5)"] },
+      { id: 55, cat: "System of Government", q: "How long do Supreme Court justices serve?", a: ["(For) life", "Lifetime appointment", "Until retirement"] },
+      { id: 56, cat: "System of Government", q: "Supreme Court justices serve for life. Why?", a: ["To be independent (of politics)", "To limit outside political influence"] },
+      { id: 57, cat: "System of Government", q: "Who is the Chief Justice of the United States now?", a: ["John Roberts (or visit uscis.gov/citizenship/testupdates)"] },
+      { id: 58, cat: "System of Government", q: "Name one power that is only for the federal government.", a: ["Print paper money", "Mint coins", "Declare war", "Create an army", "Make treaties", "Set foreign policy"] },
+      { id: 59, cat: "System of Government", q: "Name one power that is only for the states.", a: ["Provide schooling and education", "Provide protection (police)", "Provide safety (fire departments)", "Give a driver's license", "Approve zoning and land use"] },
+      { id: 60, cat: "System of Government", q: "What is the purpose of the 10th Amendment?", a: ["Powers not given to the federal government belong to the states or to the people"] },
+      { 
+        id: 61, 
+        cat: "System of Government", 
+        q: "Who is the governor of your state now?", 
+        a: new Date() >= new Date("2027-01-11T12:00:00") 
+          ? ["Keisha Lance Bottoms"] 
+          : ["Brian Kemp (until Jan 11, 2027)", "Keisha Lance Bottoms (taking office Jan 11, 2027)"] 
+      },
+      { id: 62, cat: "System of Government", q: "What is the capital of your state?", a: ["Atlanta"] },
+      { id: 63, cat: "Rights and Responsibilities", q: "There are four amendments to the U.S. Constitution about who can vote. Describe one of them.", a: ["Citizens eighteen (18) and older can vote", "You don't have to pay a poll tax to vote", "Any citizen can vote (women and men)", "A male citizen of any race can vote"] },
+      { id: 64, cat: "Rights and Responsibilities", q: "Who can vote in federal elections, run for federal office, and serve on a jury in the United States?", a: ["Citizens", "U.S. citizens"] },
+      { id: 65, cat: "Rights and Responsibilities", q: "What are three rights of everyone living in the United States?", a: ["Freedom of expression", "Freedom of speech", "Freedom of assembly", "Freedom of religion", "Right to bear arms"] },
+      { id: 66, cat: "Rights and Responsibilities", q: "What do we show loyalty to when we say the Pledge of Allegiance?", a: ["The United States", "The flag"] },
+      { id: 67, cat: "Rights and Responsibilities", q: "Name two promises that new citizens make in the Oath of Allegiance.", a: ["Give up loyalty to other countries", "Defend the Constitution", "Obey the laws of the United States", "Serve in the military if needed"] },
+      { id: 68, cat: "Rights and Responsibilities", q: "How can people become United States citizens?", a: ["Be born in the United States (14th Amendment)", "Naturalize", "Derive citizenship"] },
+      { id: 69, cat: "Rights and Responsibilities", q: "What are two examples of civic participation in the United States?", a: ["Vote", "Run for office", "Join a political party", "Contact elected officials"] },
+      { id: 70, cat: "Rights and Responsibilities", q: "What is one way Americans can serve their country?", a: ["Vote", "Pay taxes", "Obey the law", "Serve in the military"] },
+      { id: 71, cat: "Rights and Responsibilities", q: "Why is it important to pay federal taxes?", a: ["Required by law", "Fund the federal government", "Civic duty"] },
+      { id: 72, cat: "Rights and Responsibilities", q: "It is important for all men age 18 through 25 to register for the Selective Service. Name one reason why.", a: ["Required by law", "Civic duty", "Makes the draft fair, if needed"] },
+      { id: 73, cat: "Colonial Period and Independence", q: "The colonists came to America for many reasons. Name one.", a: ["Freedom", "Religious freedom", "Economic opportunity", "Escape persecution"] },
+      { id: 74, cat: "Colonial Period and Independence", q: "Who lived in America before the Europeans arrived?", a: ["American Indians", "Native Americans"] },
+      { id: 75, cat: "Colonial Period and Independence", q: "What group of people was taken and sold as slaves?", a: ["Africans", "People from Africa"] },
+      { id: 76, cat: "Colonial Period and Independence", q: "What war did the Americans fight to win independence from Britain?", a: ["American Revolution", "Revolutionary War", "War for American Independence"] },
+      { id: 77, cat: "Colonial Period and Independence", q: "Name one reason why the Americans declared independence from Britain.", a: ["High taxes", "Taxation without representation", "Quartering British soldiers", "Lack of self-government"] },
+      { id: 78, cat: "Colonial Period and Independence", q: "Who wrote the Declaration of Independence?", a: ["(Thomas) Jefferson"] },
+      { id: 79, cat: "Colonial Period and Independence", q: "When was the Declaration of Independence adopted?", a: ["July 4, 1776"] },
+      { id: 80, cat: "Colonial Period and Independence", q: "The American Revolution had many important events. Name one.", a: ["Battle of Bunker Hill", "Declaration of Independence", "Washington Crossing the Delaware", "Battle of Yorktown"] },
+      { id: 81, cat: "Colonial Period and Independence", q: "There were 13 original states. Name five.", a: ["Georgia, New York, Virginia, Pennsylvania, Massachusetts (and others)"] },
+      { id: 82, cat: "Colonial Period and Independence", q: "What founding document was written in 1787?", a: ["(U.S.) Constitution"] },
+      { id: 83, cat: "Colonial Period and Independence", q: "The Federalist Papers supported the passage of the U.S. Constitution. Name one of the writers.", a: ["(James) Madison", "(Alexander) Hamilton", "(John) Jay", "Publius"] },
+      { id: 84, cat: "Colonial Period and Independence", q: "Why were the Federalist Papers important?", a: ["They helped people understand the Constitution", "Supported passing the Constitution"] },
+      { id: 85, cat: "Colonial Period and Independence", q: "Benjamin Franklin is famous for many things. Name one.", a: ["First Postmaster General", "Inventor", "U.S. diplomat", "Free public libraries"] },
+      { id: 86, cat: "Colonial Period and Independence", q: "George Washington is famous for many things. Name one.", a: ["Father of Our Country", "First president of the United States", "General of Continental Army"] },
+      { id: 87, cat: "Colonial Period and Independence", q: "Thomas Jefferson is famous for many things. Name one.", a: ["Writer of Declaration of Independence", "Third president", "Louisiana Purchase"] },
+      { id: 88, cat: "Colonial Period and Independence", q: "James Madison is famous for many things. Name one.", a: ["Father of the Constitution", "Fourth president", "President during War of 1812"] },
+      { id: 89, cat: "Colonial Period and Independence", q: "Alexander Hamilton is famous for many things. Name one.", a: ["First Secretary of the Treasury", "Wrote Federalist Papers", "Established First Bank of the U.S."] },
+      { id: 90, cat: "1800s", q: "What territory did the United States buy from France in 1803?", a: ["Louisiana Territory", "Louisiana"] },
+      { id: 91, cat: "1800s", q: "Name one war fought by the United States in the 1800s.", a: ["War of 1812", "Mexican-American War", "Civil War", "Spanish-American War"] },
+      { id: 92, cat: "1800s", q: "Name the U.S. war between the North and the South.", a: ["The Civil War"] },
+      { id: 93, cat: "1800s", q: "The Civil War had many important events. Name one.", a: ["Battle of Fort Sumter", "Emancipation Proclamation", "Battle of Gettysburg", "Surrender at Appomattox"] },
+      { id: 94, cat: "1800s", q: "Abraham Lincoln is famous for many things. Name one.", a: ["Freed the slaves (Emancipation Proclamation)", "Saved the Union", "16th president"] },
+      { id: 95, cat: "1800s", q: "What did the Emancipation Proclamation do?", a: ["Freed the slaves in the Confederacy / Southern states"] },
+      { id: 96, cat: "1800s", q: "What U.S. war ended slavery?", a: ["The Civil War"] },
+      { id: 97, cat: "1800s", q: "What amendment says all persons born or naturalized in the United States are citizens?", a: ["14th Amendment"] },
+      { id: 98, cat: "1800s", q: "When did all men get the right to vote?", a: ["After the Civil War", "15th Amendment", "1870"] },
+      { id: 99, cat: "1800s", q: "Name one leader of the women's rights movement in the 1800s.", a: ["Susan B. Anthony", "Elizabeth Cady Stanton", "Sojourner Truth", "Harriet Tubman"] },
+      { id: 100, cat: "Recent History", q: "Name one war fought by the United States in the 1900s.", a: ["World War I", "World War II", "Korean War", "Vietnam War", "Persian Gulf War"] },
+      { id: 101, cat: "Recent History", q: "Why did the United States enter World War I?", a: ["Germany attacked U.S. ships", "Support Allied Powers"] },
+      { id: 102, cat: "Recent History", q: "When did all women get the right to vote?", a: ["1920", "19th Amendment"] },
+      { id: 103, cat: "Recent History", q: "What was the Great Depression?", a: ["Longest economic recession in modern history"] },
+      { id: 104, cat: "Recent History", q: "When did the Great Depression start?", a: ["Stock market crash of 1929", "The Great Crash"] },
+      { id: 105, cat: "Recent History", q: "Who was president during the Great Depression and World War II?", a: ["(Franklin) Roosevelt"] },
+      { id: 106, cat: "Recent History", q: "Why did the United States enter World War II?", a: ["Bombing of Pearl Harbor"] },
+      { id: 107, cat: "Recent History", q: "Dwight Eisenhower is famous for many things. Name one.", a: ["General during World War II", "34th president", "Signed Interstate Highway Act of 1956"] },
+      { id: 108, cat: "Recent History", q: "Who was the United States' main rival during the Cold War?", a: ["Soviet Union", "USSR", "Russia"] },
+      { id: 109, cat: "Recent History", q: "During the Cold War, what was one main concern of the United States?", a: ["Communism", "Nuclear war"] },
+      { id: 110, cat: "Recent History", q: "Why did the United States enter the Korean War?", a: ["To stop the spread of communism"] },
+      { id: 111, cat: "Recent History", q: "Why did the United States enter the Vietnam War?", a: ["To stop the spread of communism"] },
+      { id: 112, cat: "Recent History", q: "What did the civil rights movement do?", a: ["Fought to end racial discrimination"] },
+      { id: 113, cat: "Recent History", q: "Martin Luther King, Jr. is famous for many things. Name one.", a: ["Fought for civil rights", "Worked for equality for all Americans"] },
+      { id: 114, cat: "Recent History", q: "Why did the United States enter the Persian Gulf War?", a: ["To force the Iraqi military from Kuwait"] },
+      { id: 115, cat: "Recent History", q: "What major event happened on September 11, 2001 in the United States?", a: ["Terrorists attacked the United States", "Attacked World Trade Center and Pentagon"] },
+      { id: 116, cat: "Recent History", q: "Name one U.S. military conflict after September 11, 2001.", a: ["War in Afghanistan", "War in Iraq", "Global War on Terror"] },
+      { id: 117, cat: "Recent History", q: "Name one American Indian tribe in the United States.", a: ["Cherokee", "Navajo", "Sioux", "Chippewa", "Choctaw", "Creek", "Apache"] },
+      { id: 118, cat: "Recent History", q: "Name one example of an American innovation.", a: ["Light bulb", "Automobile", "Skyscrapers", "Airplane", "Assembly line", "Moon landing", "Integrated circuit (IC)"] },
+      { id: 119, cat: "Symbols and Holidays", q: "What is the capital of the United States?", a: ["Washington, D.C."] },
+      { id: 120, cat: "Symbols and Holidays", q: "Where is the Statue of Liberty?", a: ["New York Harbor", "Liberty Island"] },
+      { id: 121, cat: "Symbols and Holidays", q: "Why does the flag have 13 stripes?", a: ["Because there were 13 original colonies"] },
+      { id: 122, cat: "Symbols and Holidays", q: "Why does the flag have 50 stars?", a: ["One star for each state (50 states)"] },
+      { id: 123, cat: "Symbols and Holidays", q: "What is the name of the national anthem?", a: ["The Star-Spangled Banner"] },
+      { id: 124, cat: "Symbols and Holidays", q: "The Nation's first motto was 'E Pluribus Unum.' What does that mean?", a: ["Out of many, one", "We all become one"] },
+      { id: 125, cat: "Symbols and Holidays", q: "What is Independence Day?", a: ["A holiday to celebrate U.S. independence (from Britain)", "The country's birthday"] },
+      { id: 126, cat: "Symbols and Holidays", q: "Name three national U.S. holidays.", a: ["New Year's Day", "Martin Luther King, Jr. Day", "Memorial Day", "Independence Day", "Labor Day", "Thanksgiving", "Christmas"] },
+      { id: 127, cat: "Symbols and Holidays", q: "What is Memorial Day?", a: ["A holiday to honor soldiers who died in military service"] },
+      { id: 128, cat: "Symbols and Holidays", q: "What is Veterans Day?", a: ["A holiday to honor people in the U.S. military / veterans"] }
+    ];
+
+    // 2. STATE MANAGEMENT
+    let examDeck = [];
+    let currentIndex = 0;
+    let correctCount = 0;
+    let incorrectCount = 0;
+
+    function initExam() {
+      examDeck = [...rawQuestions].sort(() => Math.random() - 0.5);
+      currentIndex = 0;
+      correctCount = 0;
+      incorrectCount = 0;
+      document.getElementById('view-result').classList.add('hidden');
+      document.getElementById('view-exam').classList.remove('hidden');
+      renderCurrentExamQuestion();
+    }
+
+    function renderCurrentExamQuestion() {
+      const q = examDeck[currentIndex];
+      document.getElementById('exam-qnum').innerText = `${currentIndex + 1} / 20`;
+      document.getElementById('exam-correct').innerText = `${correctCount} / 12`;
+      document.getElementById('exam-incorrect').innerText = `${incorrectCount} / 9`;
+      document.getElementById('exam-category').innerText = q.cat;
+      document.getElementById('exam-question').innerText = q.q;
+
+      const ansList = document.getElementById('exam-answers');
+      ansList.innerHTML = '';
+      q.a.forEach(ans => {
+        const li = document.createElement('li');
+        li.innerText = ans;
+        ansList.appendChild(li);
+      });
+
+      document.getElementById('answer-box').classList.add('hidden');
+      document.getElementById('controls-reveal').classList.remove('hidden');
+      document.getElementById('controls-grade').classList.add('hidden');
+
+      speak(q.q);
+    }
+
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.rate = 0.95;
+        window.speechSynthesis.speak(msg);
+      }
+    }
+
+    // 3. EVENT HANDLERS
+    document.getElementById('btn-speak').addEventListener('click', () => {
+      speak(examDeck[currentIndex].q);
+    });
+
+    document.getElementById('btn-reveal').addEventListener('click', () => {
+      document.getElementById('answer-box').classList.remove('hidden');
+      document.getElementById('controls-reveal').classList.add('hidden');
+      document.getElementById('controls-grade').classList.remove('hidden');
+    });
+
+    document.getElementById('btn-correct').addEventListener('click', () => {
+      correctCount++;
+      evaluateNextStep();
+    });
+
+    document.getElementById('btn-incorrect').addEventListener('click', () => {
+      incorrectCount++;
+      evaluateNextStep();
+    });
+
+    function evaluateNextStep() {
+      // USCIS Test Rules
+      if (correctCount >= 12) {
+        finishExam(true, `Passed! Reached 12 correct answers in ${currentIndex + 1} questions.`);
+        return;
+      }
+      if (incorrectCount >= 9) {
+        finishExam(false, `Failed. Reached 9 incorrect answers.`);
+        return;
+      }
+      if (currentIndex + 1 >= 20) {
+        finishExam(correctCount >= 12, `Completed 20 questions. Score: ${correctCount} correct.`);
+        return;
+      }
+
+      currentIndex++;
+      renderCurrentExamQuestion();
+    }
+
+    function finishExam(passed, message) {
+      document.getElementById('view-exam').classList.add('hidden');
+      const resView = document.getElementById('view-result');
+      resView.classList.remove('hidden');
+      const title = document.getElementById('result-title');
+      title.innerText = passed ? "TEST PASSED! 🇺🇸" : "TEST NOT PASSED";
+      title.className = `text-3xl font-extrabold mb-2 ${passed ? 'text-emerald-400' : 'text-rose-400'}`;
+      document.getElementById('result-desc').innerText = message;
+    }
+
+    document.getElementById('btn-restart').addEventListener('click', initExam);
+
+    // Tab Navigation
+    document.getElementById('tab-exam').addEventListener('click', () => {
+      document.getElementById('view-exam').classList.remove('hidden');
+      document.getElementById('view-study').classList.add('hidden');
+      document.getElementById('tab-exam').className = "px-3 py-1 bg-blue-700 font-semibold rounded text-sm text-white";
+      document.getElementById('tab-study').className = "px-3 py-1 bg-slate-800 text-slate-300 rounded text-sm";
+    });
+
+    document.getElementById('tab-study').addEventListener('click', () => {
+      document.getElementById('view-exam').classList.add('hidden');
+      document.getElementById('view-result').classList.add('hidden');
+      document.getElementById('view-study').classList.remove('hidden');
+      document.getElementById('tab-study').className = "px-3 py-1 bg-blue-700 font-semibold rounded text-sm text-white";
+      document.getElementById('tab-exam').className = "px-3 py-1 bg-slate-800 text-slate-300 rounded text-sm";
+      renderStudyList(rawQuestions);
+    });
+
+    // Study View Rendering
+    function renderStudyList(list) {
+      const c = document.getElementById('study-container');
+      c.innerHTML = '';
+      list.forEach(item => {
+        const div = document.createElement('div');
+        div.className = "bg-slate-800 p-3 rounded-lg border border-slate-700 text-sm";
+        div.innerHTML = `
+          <div class="text-xs text-blue-400 font-bold mb-1">Q${item.id}. ${item.cat}</div>
+          <div class="font-medium text-white mb-2">${item.q}</div>
+          <div class="text-emerald-300 text-xs">${item.a.join(' • ')}</div>
+        `;
+        c.appendChild(div);
+      });
+    }
+
+    document.getElementById('search-study').addEventListener('input', (e) => {
+      const val = e.target.value.toLowerCase();
+      const filtered = rawQuestions.filter(q => 
+        q.q.toLowerCase().includes(val) || 
+        q.a.some(ans => ans.toLowerCase().includes(val))
+      );
+      renderStudyList(filtered);
+    });
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+
+    // Launch
+    initExam();
+  </script>
+</body>
+</html>
