@@ -29,6 +29,16 @@
     </div>
   </header>
 
+  <!-- Voice & Accent Bar -->
+  <div class="bg-slate-950/80 border-b border-slate-800 px-4 py-2">
+    <div class="max-w-md mx-auto flex items-center justify-between text-xs">
+      <span class="text-slate-400 font-medium">Reader Voice (English):</span>
+      <select id="voice-select" class="bg-slate-800 text-slate-200 border border-slate-700 rounded px-2 py-1 max-w-[200px] truncate focus:outline-none focus:border-blue-500">
+        <option value="">Detecting English voices...</option>
+      </select>
+    </div>
+  </div>
+
   <!-- Main Container -->
   <main class="max-w-md mx-auto w-full flex-grow p-4 flex flex-col justify-center">
 
@@ -57,8 +67,8 @@
         <div>
           <div class="flex justify-between items-start mb-2">
             <span id="exam-category" class="text-xs font-semibold text-blue-400 uppercase tracking-wider">Category</span>
-            <button id="btn-speak" class="p-2 bg-blue-950 hover:bg-blue-900 border border-blue-700 rounded-full text-blue-300 text-xs" title="Listen to question">
-              🔊 Repeat
+            <button id="btn-speak" class="p-2 bg-blue-950 hover:bg-blue-900 border border-blue-700 rounded-full text-blue-300 text-xs flex items-center space-x-1" title="Listen to question">
+              <span>🔊</span> <span>Repeat</span>
             </button>
           </div>
           <h2 id="exam-question" class="text-xl font-semibold text-white leading-snug mt-1">Loading...</h2>
@@ -123,7 +133,7 @@
   </footer>
 
   <script>
-    // 1. DATASET WITH DYNAMIC DATES (Speaker of House Q30, Governor Q61)
+    // 1. DATASET
     const speakerAnswers = new Date() >= new Date("2027-01-03T12:00:00")
       ? ["Hakeem Jeffries", "Jeffries", "Hakeem Sekou Jeffries"]
       : ["Mike Johnson", "Johnson", "James Michael Johnson"];
@@ -263,15 +273,158 @@
       { id: 128, cat: "Symbols and Holidays", q: "What is Veterans Day?", a: ["Holiday to honor people in the U.S. military", "Honor veterans"] }
     ];
 
-    // 2. STATE MANAGEMENT & FUZZY COMPARATOR
-    let examDeck = [];
-    let currentIndex = 0;
-    let correctCount = 0;
-    let incorrectCount = 0;
+    // 2. SPEECH SYNTHESIS ENGINE (FORCED ENGLISH VOICE)
+    let englishVoices = [];
+    let selectedVoice = null;
+
+    function populateVoices() {
+      if (!('speechSynthesis' in window)) return;
+      const allVoices = window.speechSynthesis.getVoices();
+      // Filter specifically for English voice packages installed on the device
+      englishVoices = allVoices.filter(v => v.lang.startsWith('en'));
+
+      const voiceSelect = document.getElementById('voice-select');
+      voiceSelect.innerHTML = '';
+
+      if (englishVoices.length === 0) {
+        const opt = document.createElement('option');
+        opt.innerText = "Default English (en-US)";
+        voiceSelect.appendChild(opt);
+        return;
+      }
+
+      // Prioritize US English voices
+      englishVoices.sort((a, b) => {
+        if (a.lang === 'en-US' && b.lang !== 'en-US') return -1;
+        if (b.lang === 'en-US' && a.lang !== 'en-US') return 1;
+        return 0;
+      });
+
+      englishVoices.forEach((voice, index) => {
+        const opt = document.createElement('option');
+        opt.value = index;
+        opt.innerText = `${voice.name} (${voice.lang})`;
+        voiceSelect.appendChild(opt);
+      });
+
+      // Default to first English option
+      selectedVoice = englishVoices[0];
+      voiceSelect.selectedIndex = 0;
+    }
+
+    if ('speechSynthesis' in window) {
+      populateVoices();
+      window.speechSynthesis.onvoiceschanged = populateVoices;
+    }
+
+    document.getElementById('voice-select').addEventListener('change', (e) => {
+      const idx = e.target.value;
+      if (englishVoices[idx]) {
+        selectedVoice = englishVoices[idx];
+      }
+    });
+
+    function speak(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'en-US';
+      if (selectedVoice) {
+        msg.voice = selectedVoice;
+      }
+      msg.rate = 0.95;
+      window.speechSynthesis.speak(msg);
+    }
+
+    // 3. SPEECH RECOGNITION WITH EXPLICIT PERMISSION PROMPT
     let recognition = null;
     let isListening = false;
 
-    // Levenshtein similarity metric
+    async function ensureMicPermission() {
+      // Direct WebRTC mic access check required by Android standalone PWAs
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // Stop immediately; this only primes the permission token for WebSpeech
+          stream.getTracks().forEach(track => track.stop());
+          return true;
+        } catch (err) {
+          console.warn("User dismissed or blocked mic permission:", err);
+          alert("Microphone permission was not granted. Please allow microphone access in Chrome settings for this site.");
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function initSpeechEngine() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        document.getElementById('btn-mic').classList.add('hidden');
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.lang = 'en-US'; // Ensures transcription matches English phonemes
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        isListening = true;
+        document.getElementById('mic-status').innerText = "Listening...";
+        document.getElementById('mic-icon').classList.add('pulse-mic');
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        handleSpokenAnswer(transcript);
+      };
+
+      recognition.onerror = (e) => {
+        console.warn("Speech error:", e.error);
+        if (e.error === 'not-allowed') {
+          alert("Microphone is blocked. In Chrome: tap lock/settings icon -> Permissions -> Microphone -> Allow.");
+        }
+        stopListening();
+      };
+
+      recognition.onend = () => {
+        stopListening();
+      };
+    }
+
+    function stopListening() {
+      isListening = false;
+      document.getElementById('mic-status').innerText = "Tap to Speak Answer";
+      document.getElementById('mic-icon').classList.remove('pulse-mic');
+    }
+
+    async function toggleListening() {
+      if (!recognition) return;
+      if (isListening) {
+        recognition.stop();
+        return;
+      }
+
+      const hasPerm = await ensureMicPermission();
+      if (!hasPerm) return;
+
+      try {
+        recognition.start();
+      } catch (e) {
+        console.error("SpeechRecognition start failed:", e);
+      }
+    }
+
+    // 4. FUZZY MATCH LOGIC
+    function cleanString(str) {
+      return str.toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+        .replace(/\b(the|a|an|is|it|to|of|in|for|and|that|by)\b/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
     function similarity(s1, s2) {
       let longer = s1.toLowerCase().trim();
       let shorter = s2.toLowerCase().trim();
@@ -303,29 +456,18 @@
       return (longerLength - costs[shorter.length]) / parseFloat(longerLength);
     }
 
-    function cleanString(str) {
-      return str.toLowerCase()
-        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
-        .replace(/\b(the|a|an|is|it|to|of|in|for|and|that|by)\b/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-    }
-
     function checkAnswerFuzzy(spokenText, acceptedAnswers) {
       const cleanSpoken = cleanString(spokenText);
       if (!cleanSpoken) return false;
 
       for (const ans of acceptedAnswers) {
         const cleanTarget = cleanString(ans);
-        // Direct containment check (e.g. "it is Hakeem Jeffries" contains "hakeem jeffries")
         if (cleanSpoken.includes(cleanTarget) || cleanTarget.includes(cleanSpoken)) {
           return true;
         }
-        // Character similarity threshold of 75%
         if (similarity(cleanSpoken, cleanTarget) >= 0.75) {
           return true;
         }
-        // Multi-word keyword subset matching
         const targetWords = cleanTarget.split(' ').filter(w => w.length > 2);
         if (targetWords.length > 0) {
           const matchedWords = targetWords.filter(w => cleanSpoken.includes(w));
@@ -335,46 +477,6 @@
         }
       }
       return false;
-    }
-
-    // 3. VOICE RECOGNITION SETUP
-    function setupSpeechRecognition() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        document.getElementById('btn-mic').classList.add('hidden');
-        return;
-      }
-
-      recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.lang = 'en-US';
-      recognition.interimResults = false;
-
-      recognition.onstart = () => {
-        isListening = true;
-        document.getElementById('mic-status').innerText = "Listening...";
-        document.getElementById('mic-icon').classList.add('pulse-mic');
-      };
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        handleSpokenAnswer(transcript);
-      };
-
-      recognition.onerror = (e) => {
-        console.warn("Speech recognition error:", e.error);
-        stopListening();
-      };
-
-      recognition.onend = () => {
-        stopListening();
-      };
-    }
-
-    function stopListening() {
-      isListening = false;
-      document.getElementById('mic-status').innerText = "Tap to Speak Answer";
-      document.getElementById('mic-icon').classList.remove('pulse-mic');
     }
 
     function handleSpokenAnswer(transcript) {
@@ -390,20 +492,24 @@
 
       badge.classList.remove('hidden');
       if (isMatch) {
-        badge.innerText = "Match Detected (Likely Correct)";
+        badge.innerText = "Match Detected";
         badge.className = "text-xs px-2 py-1 rounded font-bold bg-emerald-950 text-emerald-400 border border-emerald-700";
       } else {
-        badge.innerText = "No Confident Match";
+        badge.innerText = "No Match";
         badge.className = "text-xs px-2 py-1 rounded font-bold bg-rose-950 text-rose-400 border border-rose-700";
       }
 
-      // Automatically reveal answers for confirmation
       document.getElementById('answer-box').classList.remove('hidden');
       document.getElementById('controls-reveal').classList.add('hidden');
       document.getElementById('controls-grade').classList.remove('hidden');
     }
 
-    // 4. EXAM LIFECYCLE
+    // 5. TEST LIFECYCLE & NAVIGATION
+    let examDeck = [];
+    let currentIndex = 0;
+    let correctCount = 0;
+    let incorrectCount = 0;
+
     function initExam() {
       examDeck = [...rawQuestions].sort(() => Math.random() - 0.5);
       currentIndex = 0;
@@ -422,7 +528,6 @@
       document.getElementById('exam-category').innerText = q.cat;
       document.getElementById('exam-question').innerText = q.q;
 
-      // Reset voice UI elements
       document.getElementById('heard-box').classList.add('hidden');
       document.getElementById('match-badge').classList.add('hidden');
       document.getElementById('heard-text').innerText = '';
@@ -442,28 +547,8 @@
       speak(q.q);
     }
 
-    function speak(text) {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const msg = new SpeechSynthesisUtterance(text);
-        msg.rate = 0.95;
-        window.speechSynthesis.speak(msg);
-      }
-    }
-
-    // 5. EVENT LISTENERS
-    document.getElementById('btn-mic').addEventListener('click', () => {
-      if (!recognition) return;
-      if (isListening) {
-        recognition.stop();
-      } else {
-        recognition.start();
-      }
-    });
-
-    document.getElementById('btn-speak').addEventListener('click', () => {
-      speak(examDeck[currentIndex].q);
-    });
+    document.getElementById('btn-mic').addEventListener('click', toggleListening);
+    document.getElementById('btn-speak').addEventListener('click', () => speak(examDeck[currentIndex].q));
 
     document.getElementById('btn-reveal').addEventListener('click', () => {
       document.getElementById('answer-box').classList.remove('hidden');
@@ -510,7 +595,6 @@
 
     document.getElementById('btn-restart').addEventListener('click', initExam);
 
-    // Tab Navigation
     document.getElementById('tab-exam').addEventListener('click', () => {
       document.getElementById('view-exam').classList.remove('hidden');
       document.getElementById('view-study').classList.add('hidden');
@@ -555,7 +639,7 @@
       navigator.serviceWorker.register('./sw.js');
     }
 
-    setupSpeechRecognition();
+    initSpeechEngine();
     initExam();
   </script>
 </body>
